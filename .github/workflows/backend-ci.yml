@@ -160,7 +160,42 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
-  # ── 4. Promote to test environment ────────────────────────────────────────
+  # ── 4. CodeQL Security Analysis ──────────────────────────────────────────
+  codeql:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java
+          queries: security-and-quality
+
+      - name: Build for CodeQL
+        run: mvn compile -B -DskipTests
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:java"
+
+  # ── 5. Promote to test environment ────────────────────────────────────────
   promote-test:
     name: Promote → test
     needs: [docker, scan]
