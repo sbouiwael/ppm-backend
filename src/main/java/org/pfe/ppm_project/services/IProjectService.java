@@ -19,4 +19,11 @@ public interface IProjectService {
     Optional<ProjectDTO> update(Long id, ProjectCreateUpdateDTO dto);
 
     boolean deactivate(Long id);
+
+    void setProjectActive(Long id, boolean active);
+
+    void deleteProject(Long id);
+
+    /** Verifie si un utilisateur est le chef de projet designe pour ce projet. */
+    boolean isProjectManager(Long projectId, Long userId);
 }

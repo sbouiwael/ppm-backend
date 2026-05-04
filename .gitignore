@@ -31,3 +31,17 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Secrets ###
+.env
+*.env
+# application-prod.properties is intentionally NOT ignored:
+# it contains only config overrides, no secrets (secrets use ${ENV_VAR} references)
+projects/
+
+### Claude ###
+.claude/
+
+### JVM crash dumps ###
+hs_err_pid*.log
+replay_pid*.log

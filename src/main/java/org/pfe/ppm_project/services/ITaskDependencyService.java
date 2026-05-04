@@ -14,4 +14,6 @@ public interface ITaskDependencyService {
     List<TaskDependencyDTO> getSuccessorsOfTask(Long taskId);
 
     void deleteDependency(Long id);
+
+    List<TaskDependencyDTO> getByProject(Long projectId);
 }

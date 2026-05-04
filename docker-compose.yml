@@ -1,0 +1,90 @@
+# ==============================================================
+# PPM BIAT — Docker Compose (développement local)
+# Usage : docker-compose up --build
+# ==============================================================
+
+services:
+
+  # ── MySQL 8 ──────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: ppm-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-PPM}
+    ports:
+      - "3306:3306"
+    volumes:
+      - ppm_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ppm-network
+
+  # ── Spring Boot Backend ───────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ppm-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-PPM}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      DDL_AUTO: ${DDL_AUTO:-update}
+      # JWT_SECRET MUST be set in .env — no default for security. Generate with:
+      # openssl rand -hex 64
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200,http://localhost:80}
+      FILE_UPLOAD_DIR: /app/projects
+      SERVER_PORT: 8082
+    ports:
+      - "8082:8082"
+    volumes:
+      - ppm_uploads:/app/projects
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ppm-network
+
+  # ── Angular Frontend (Nginx) ──────────────────────────────
+  frontend:
+    build:
+      context: ../ppm_front
+      dockerfile: Dockerfile
+    container_name: ppm-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    networks:
+      - ppm-network
+
+# ── Volumes persistants ───────────────────────────────────
+volumes:
+  ppm_mysql_data:
+    driver: local
+  ppm_uploads:
+    driver: local
+
+# ── Réseau interne ────────────────────────────────────────
+networks:
+  ppm-network:
+    driver: bridge

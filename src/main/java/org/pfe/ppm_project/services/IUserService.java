@@ -17,4 +17,8 @@ public interface IUserService {
     User updateUser(Long id, User user);
 
     void deactivateUser(Long id);
+
+    void setUserActive(Long id, boolean active);
+
+    void deleteUser(Long id);
 }
