@@ -13,7 +13,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.10</version>
+        <version>3.5.14</version>
         <relativePath/>
     </parent>
 
@@ -48,10 +48,10 @@
         <spring-security.version>6.5.10</spring-security.version>
 
         <!-- Spring Framework — patche Annotation Detection + scripting + cache poisoning + SSE -->
-        <spring-framework.version>6.2.15</spring-framework.version>
+        <spring-framework.version>6.2.18</spring-framework.version>
 
-        <!-- Jackson — patche Number Length Constraint Bypass DoS -->
-        <jackson-bom.version>2.19.4</jackson-bom.version>
+        <!-- Jackson — patche Number Length Constraint Bypass DoS (2.21.x managed by Spring Boot 3.5.14) -->
+        <jackson-bom.version>2.21.2</jackson-bom.version>
 
         <!-- Apache Commons Lang — patche CVE-2025-48924 (Uncontrolled Recursion) -->
         <commons-lang3.version>3.18.0</commons-lang3.version>

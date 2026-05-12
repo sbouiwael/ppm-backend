@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor @Builder
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
-@ToString(exclude = {"projectManager", "portefeuille", "calendar"})
 public class Project {
 
     // Identifiant unique auto-genere
@@ -108,6 +107,11 @@ public class Project {
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
         normalize();
+    }
+
+    @Override
+    public String toString() {
+        return "Project{id=" + id + ", name='" + name + "', progress=" + progress + "}";
     }
 
     // Normalise les champs : trim des textes, clamp du progres, coherence des dates

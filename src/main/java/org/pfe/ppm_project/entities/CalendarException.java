@@ -15,7 +15,6 @@ import java.time.LocalDate;
 @Table(name = "calendar_exceptions")
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor @Builder
-@ToString(exclude = "calendar")
 public class CalendarException {
 
     // Identifiant unique auto-genere
@@ -46,4 +45,9 @@ public class CalendarException {
     @Builder.Default
     @Column(nullable = false)
     private Double workHours = 0.0;
+
+    @Override
+    public String toString() {
+        return "CalendarException{id=" + id + ", date=" + date + ", name='" + name + "', working=" + working + "}";
+    }
 }

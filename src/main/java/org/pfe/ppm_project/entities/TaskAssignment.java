@@ -20,7 +20,6 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@ToString(exclude = {"task", "user"})
 public class TaskAssignment {
 
     // Identifiant unique auto-genere
@@ -69,5 +68,10 @@ public class TaskAssignment {
         if (this.assignedHours == null || this.assignedHours < 0) {
             this.assignedHours = 0;
         }
+    }
+
+    @Override
+    public String toString() {
+        return "TaskAssignment{id=" + id + ", assignedHours=" + assignedHours + ", active=" + active + "}";
     }
 }
