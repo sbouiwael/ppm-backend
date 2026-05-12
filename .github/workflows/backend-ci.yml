@@ -38,6 +38,7 @@ jobs:
   test:
     name: Unit & Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     # Principe du moindre privilege — ce job a seulement besoin de lire le repo
     permissions:
@@ -92,6 +93,7 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     outputs:
       image-tag: ${{ steps.meta.outputs.version }}
@@ -106,11 +108,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.0.0
 
       - name: Extract image metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6.0.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -118,7 +120,7 @@ jobs:
             type=raw,value=latest,enable=true
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -143,6 +145,7 @@ jobs:
     name: Trivy Vulnerability Scan
     needs: docker
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     permissions:
       contents: read
@@ -154,7 +157,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Login to GHCR (so Trivy can pull the private image)
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -199,6 +202,7 @@ jobs:
   codeql:
     name: CodeQL Security Analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     permissions:
       actions: read
@@ -241,6 +245,7 @@ jobs:
     name: Promote → test
     needs: [docker, scan]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     # Principe du moindre privilege — le push vers ppm-gitops utilise GITOPS_TOKEN (PAT)
     # et non GITHUB_TOKEN, donc 'contents: read' suffit pour ce repo-ci.
