@@ -4,18 +4,16 @@
     <modelVersion>4.0.0</modelVersion>
 
     <!--
-        Spring Boot 3.5.5 — bump volontaire pour patcher en cascade :
-        - tomcat-embed-core (RCE, DoS, auth bypass, info disclosure)
-        - spring-security-core/web (auth bypass, info disclosure)
-        - spring-core/web/webmvc/context (path traversal, DoS)
-        - jackson-core, logback-core, commons-lang3
-        Si une version plus recente est disponible sur Maven Central, l'utiliser.
+        Spring Boot 3.5.10 — derniere patch de la ligne 3.5.x (target mai 2026).
+        Patche notamment "Spring Boot predictable temporary directory" present
+        dans spring-boot-3.5.5.jar et tire les dernieres versions du BOM
+        (Spring Framework, Spring Security, Tomcat, Jackson).
         Verification : mvn versions:display-parent-updates
     -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.5</version>
+        <version>3.5.10</version>
         <relativePath/>
     </parent>
 
@@ -30,17 +28,36 @@
         <springdoc.version>2.7.0</springdoc.version>
 
         <!--
-            Belt-and-suspenders : on force les versions patchees au-dessus
-            de celles bundlees par Spring Boot 3.5.5, au cas ou le BOM
-            n'aurait pas encore integre les correctifs.
-              - tomcat.version 10.1.53        -> patche CVE-2026-29145 (auth bypass)
-              - spring-security.version 6.5.9 -> patche CVE-2026-22732 (policy bypass)
-            Spring Boot 3.5.x bundle deja Spring Security 6.5.x, donc forcer
-            le patch reste dans la meme minor line -> pas de risque d'incompat API.
-            A retirer quand un Spring Boot plus recent (> 3.5.5) integre ces patches.
+            ============================================================
+            Overrides de securite — versions patchees pinned manuellement
+            ============================================================
+            Toutes ces properties sont DEJA reconnues par le BOM Spring Boot.
+            On les force au cas ou Spring Boot 3.5.10 n'aurait pas encore
+            integre les patches les plus recents. Ces overrides restent dans
+            les memes minor lines -> pas de risque d'incompat API.
+
+            Si le build Maven echoue "Could not find artifact X:vY", c'est que
+            la version pinnee n'existe pas encore sur Maven Central -> baisser
+            d'un patch (ex: 6.2.13 -> 6.2.12). Verifier avec :
+            mvn versions:display-property-updates
         -->
-        <tomcat.version>10.1.53</tomcat.version>
-        <spring-security.version>6.5.9</spring-security.version>
+        <!-- Tomcat — patche info disclosure (log files + JsonAccessLogValve) + client cert bypass -->
+        <tomcat.version>10.1.55</tomcat.version>
+
+        <!-- Spring Security — patche race condition OneTimeToken + timing attack defense bypass -->
+        <spring-security.version>6.5.10</spring-security.version>
+
+        <!-- Spring Framework — patche Annotation Detection + scripting + cache poisoning + SSE -->
+        <spring-framework.version>6.2.15</spring-framework.version>
+
+        <!-- Jackson — patche Number Length Constraint Bypass DoS -->
+        <jackson-bom.version>2.19.4</jackson-bom.version>
+
+        <!-- Apache Commons Lang — patche CVE-2025-48924 (Uncontrolled Recursion) -->
+        <commons-lang3.version>3.18.0</commons-lang3.version>
+
+        <!-- Logback — patche conditional code exec + malicious config -->
+        <logback.version>1.5.32</logback.version>
     </properties>
 
     <dependencies>
