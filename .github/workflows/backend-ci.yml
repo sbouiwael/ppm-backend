@@ -38,6 +38,10 @@ jobs:
     name: Unit & Integration Tests
     runs-on: ubuntu-latest
 
+    # Principe du moindre privilege — ce job a seulement besoin de lire le repo
+    permissions:
+      contents: read
+
     services:
       mysql:
         image: mysql:8.0
@@ -236,6 +240,11 @@ jobs:
     name: Promote → test
     needs: [docker, scan]
     runs-on: ubuntu-latest
+
+    # Principe du moindre privilege — le push vers ppm-gitops utilise GITOPS_TOKEN (PAT)
+    # et non GITHUB_TOKEN, donc 'contents: read' suffit pour ce repo-ci.
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout GitOps repo

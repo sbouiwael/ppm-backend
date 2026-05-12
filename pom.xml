@@ -3,10 +3,19 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!--
+        Spring Boot 3.5.5 — bump volontaire pour patcher en cascade :
+        - tomcat-embed-core (RCE, DoS, auth bypass, info disclosure)
+        - spring-security-core/web (auth bypass, info disclosure)
+        - spring-core/web/webmvc/context (path traversal, DoS)
+        - jackson-core, logback-core, commons-lang3
+        Si une version plus recente est disponible sur Maven Central, l'utiliser.
+        Verification : mvn versions:display-parent-updates
+    -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.5</version>
+        <version>3.5.5</version>
         <relativePath/>
     </parent>
 
@@ -19,6 +28,19 @@
         <java.version>17</java.version>
         <lombok.version>1.18.42</lombok.version>
         <springdoc.version>2.7.0</springdoc.version>
+
+        <!--
+            Belt-and-suspenders : on force les versions patchees au-dessus
+            de celles bundlees par Spring Boot 3.5.5, au cas ou le BOM
+            n'aurait pas encore integre les correctifs.
+              - tomcat.version 10.1.53        -> patche CVE-2026-29145 (auth bypass)
+              - spring-security.version 6.5.9 -> patche CVE-2026-22732 (policy bypass)
+            Spring Boot 3.5.x bundle deja Spring Security 6.5.x, donc forcer
+            le patch reste dans la meme minor line -> pas de risque d'incompat API.
+            A retirer quand un Spring Boot plus recent (> 3.5.5) integre ces patches.
+        -->
+        <tomcat.version>10.1.53</tomcat.version>
+        <spring-security.version>6.5.9</spring-security.version>
     </properties>
 
     <dependencies>
