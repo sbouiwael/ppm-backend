@@ -131,6 +131,9 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ── 3. Security Scan ──────────────────────────────────────────────────────
+  # NOTE: l'image vient d'etre poussee sur GHCR par le job "docker" en mode prive.
+  # Trivy doit s'authentifier a GHCR pour la tirer, sinon il echoue en 12s avec un 401
+  # et n'ecrit jamais le SARIF -> l'upload casse derriere avec "Path does not exist".
   scan:
     name: Trivy Vulnerability Scan
     needs: docker
@@ -138,27 +141,54 @@ jobs:
 
     permissions:
       contents: read
-      security-events: write   # to upload SARIF to GitHub Security tab
+      packages: read           # required to pull image from GHCR
+      security-events: write   # required to upload SARIF (needs Code Scanning enabled in repo settings)
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Trivy (CRITICAL + HIGH — fail on CRITICAL)
+      - name: Login to GHCR (so Trivy can pull the private image)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Etape 1 — produire le SARIF SANS faire echouer le job.
+      # On retire 'exit-code' pour garantir que le fichier est ecrit
+      # meme si des vulnerabilites sont detectees.
+      - name: Run Trivy (write SARIF — never fail)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ needs.docker.outputs.image-ref }}
           format: sarif
           output: trivy-results.sarif
           severity: 'CRITICAL,HIGH'
-          exit-code: '1'
           ignore-unfixed: true
 
+      # Etape 2 — upload du SARIF dans l'onglet Security.
+      # 'continue-on-error' evite de casser le pipeline si Code Scanning
+      # n'est pas active dans les reglages du repo (cas du repo prive sans GHAS).
       - name: Upload Trivy SARIF to GitHub Security
-        if: always()
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
+          category: trivy
+
+      # Etape 3 — gate qualite : on rejoue Trivy avec exit-code pour bloquer
+      # le build sur les CVE CRITICAL non corrigeables.
+      # Sortie 'table' pour avoir un resume lisible dans les logs.
+      - name: Fail build on CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.docker.outputs.image-ref }}
+          format: table
+          severity: 'CRITICAL'
+          exit-code: '1'
+          ignore-unfixed: true
 
   # ── 4. CodeQL Security Analysis ──────────────────────────────────────────
   codeql:
@@ -190,7 +220,13 @@ jobs:
       - name: Build for CodeQL
         run: mvn compile -B -DskipTests
 
+      # 'continue-on-error' tolere le cas ou Code Scanning n'est pas active
+      # dans Settings -> Code security. Pour reactiver le blocage du build :
+      # 1) repo public -> Settings -> Code security -> "Enable" sur Code scanning
+      # 2) repo prive  -> il faut GitHub Advanced Security (payant)
+      # Puis retirer la ligne 'continue-on-error' ci-dessous.
       - name: Perform CodeQL Analysis
+        continue-on-error: true
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:java"
