@@ -45,7 +45,7 @@ jobs:
 
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:8.0.40
         env:
           MYSQL_ROOT_PASSWORD: ci_root
           MYSQL_DATABASE: PPM_test
@@ -90,7 +90,7 @@ jobs:
   docker:
     name: Build & Push Docker Image
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
 
     outputs:
@@ -126,7 +126,7 @@ jobs:
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7.1.0
         with:
           context: .
           push: true
@@ -164,7 +164,7 @@ jobs:
       # On retire 'exit-code' pour garantir que le fichier est ecrit
       # meme si des vulnerabilites sont detectees.
       - name: Run Trivy (write SARIF — never fail)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ needs.docker.outputs.image-ref }}
           format: sarif
@@ -187,7 +187,7 @@ jobs:
       # le build sur les CVE CRITICAL non corrigeables.
       # Sortie 'table' pour avoir un resume lisible dans les logs.
       - name: Fail build on CRITICAL vulnerabilities
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ needs.docker.outputs.image-ref }}
           format: table
