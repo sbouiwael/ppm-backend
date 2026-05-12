@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(exclude = {"project", "parentTask"})
 public class Task {
 
     // Nombre d'heures de travail standard par jour (constante metier)

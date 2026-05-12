@@ -209,7 +209,7 @@ public class TaskService implements ITaskService {
         Long projectId = saved.getProject() != null ? saved.getProject().getId() : null;
         auditLogService.log(
                 AuditAction.UPDATE, "TASK", saved.getId(), saved.getName(),
-                "Operational update: status=" + status + ", progress=" + progress
+                "Operational update: status=" + oldStatus + "→" + status + ", progress=" + progress
                         + "%, actualWork=" + actualWorkHours + "h",
                 projectId, null
         );

@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(exclude = {"predecessor", "successor"})
 public class TaskDependency {
 
     // Identifiant unique auto-genere

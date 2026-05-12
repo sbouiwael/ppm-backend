@@ -7,6 +7,7 @@ import lombok.*;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -59,6 +60,16 @@ public class WorkCalendar {
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
+    }
+
+    /** Returns an unmodifiable view — use addException() to append. */
+    public List<CalendarException> getExceptions() {
+        return Collections.unmodifiableList(exceptions);
+    }
+
+    /** Adds an exception to the managed collection (used by seeders/builders). */
+    public void addException(CalendarException ex) {
+        exceptions.add(ex);
     }
 
     /** Convertit la chaine workDays en liste de DayOfWeek pour faciliter les calculs */

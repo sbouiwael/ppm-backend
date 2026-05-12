@@ -46,12 +46,12 @@ public class DataInitializer implements CommandLineRunner {
         // =========================================================
         String pwd = passwordEncoder.encode("Biat@2026!");
 
-        User admin = save(User.builder()
+        save(User.builder()
                 .firstName("Mohamed").lastName("Ben Ali")
                 .email("m.benali@biat.com.tn").password(pwd)
                 .role(Role.ADMIN).weeklyCapacity(40).active(true).build());
 
-        User pmo = save(User.builder()
+        save(User.builder()
                 .firstName("Sonia").lastName("Trabelsi")
                 .email("s.trabelsi@biat.com.tn").password(pwd)
                 .role(Role.PMO).weeklyCapacity(40).active(true).build());
@@ -111,7 +111,7 @@ public class DataInitializer implements CommandLineRunner {
                 .email("h.souissi@biat.com.tn").password(pwd)
                 .role(Role.DEVOPS).weeklyCapacity(40).active(true).build());
 
-        User rh = save(User.builder()
+        save(User.builder()
                 .firstName("Leila").lastName("Gharbi")
                 .email("l.gharbi@biat.com.tn").password(pwd)
                 .role(Role.RH).weeklyCapacity(35).active(true).build());

@@ -52,6 +52,7 @@ public class GlobalExceptionHandler {
     // Gere les erreurs d'acces refuse (Spring Security) -> HTTP 403
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
+        log.debug("Access denied: {}", ex.getMessage());
         return buildResponse(HttpStatus.FORBIDDEN, "Access denied");
     }
 

@@ -29,6 +29,7 @@ public class LoginAttemptService implements ILoginAttemptService {
      * @param email adresse email testee
      * @return true si l'acces est bloque, false sinon
      */
+    @Override
     public boolean isBlocked(String email) {
         if (email == null) return false;
         long[] data = attemptCache.get(email.toLowerCase());
@@ -48,6 +49,7 @@ public class LoginAttemptService implements ILoginAttemptService {
      *
      * @param email adresse email concernee
      */
+    @Override
     public void recordFailure(String email) {
         if (email == null) return;
         String key = email.toLowerCase();
@@ -67,6 +69,7 @@ public class LoginAttemptService implements ILoginAttemptService {
      *
      * @param email adresse email concernee
      */
+    @Override
     public void recordSuccess(String email) {
         if (email == null) return;
         attemptCache.remove(email.toLowerCase());
@@ -79,6 +82,7 @@ public class LoginAttemptService implements ILoginAttemptService {
      * @param email adresse email concernee
      * @return secondes restantes, ou 0 si non bloque
      */
+    @Override
     public long getRetryAfterSeconds(String email) {
         if (email == null) return 0;
         long[] data = attemptCache.get(email.toLowerCase());

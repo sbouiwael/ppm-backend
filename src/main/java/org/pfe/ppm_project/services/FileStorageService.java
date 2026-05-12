@@ -33,6 +33,7 @@ public class FileStorageService implements IFileStorageService {
     }
 
     // Cree les sous-dossiers standard (fonctions, P.V, contrats) pour un nouveau projet
+    @Override
     public void createProjectFolders(String projectName) throws IOException {
         String safeName = sanitize(projectName);
         for (String sub : ALLOWED_SUBDIRS) {
@@ -41,6 +42,7 @@ public class FileStorageService implements IFileStorageService {
     }
 
     // Enregistre un fichier dans le sous-dossier specifie d'un projet. Retourne le nom du fichier sauvegarde.
+    @Override
     public String storeFile(String projectName, String subdirectory, MultipartFile file) throws IOException {
         validateSubdirectory(subdirectory);
         String safeName = sanitize(projectName);
@@ -72,6 +74,7 @@ public class FileStorageService implements IFileStorageService {
     }
 
     // Liste les fichiers presents dans un sous-dossier d'un projet
+    @Override
     public List<String> listFiles(String projectName, String subdirectory) throws IOException {
         validateSubdirectory(subdirectory);
         String safeName = sanitize(projectName);

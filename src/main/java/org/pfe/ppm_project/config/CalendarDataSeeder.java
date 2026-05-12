@@ -100,6 +100,6 @@ public class CalendarDataSeeder implements CommandLineRunner {
                 .working(false) // false = jour non travaille
                 .workHours(0.0) // 0 heures de travail ce jour-la
                 .build();
-        cal.getExceptions().add(ex);
+        cal.addException(ex);
     }
 }

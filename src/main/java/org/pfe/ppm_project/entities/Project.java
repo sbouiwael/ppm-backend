@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor @Builder
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@ToString(exclude = {"projectManager", "portefeuille", "calendar"})
 public class Project {
 
     // Identifiant unique auto-genere
