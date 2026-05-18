@@ -1,10 +1,19 @@
 # ==============================================================
-# PPM Backend — CI/CD Pipeline (GitHub Actions)
+# PPM Backend - CI/CD Pipeline (GitHub Actions)
 # Provider-agnostic: uses GHCR by default, overridable via secrets.
 #
 # REGISTRY:          container registry URL (default: ghcr.io)
 # IMAGE_NAME:        image name          (default: <owner>/ppm-backend)
 # GITOPS_TOKEN:      PAT with write access to ppm-gitops repo
+#
+# Pipeline stages (DevSecOps - SLSA-friendly):
+#   test  ─┐
+#          ├─> docker ─┬─> scan
+#   trivy-fs ─────────┼─> sbom         ┐
+#                     ├─> sign         ├─> promote-test
+#                     └─> provenance   ┘
+#   codeql   (parallel, non-blocking on private repos w/o GHAS)
+#   quality  (parallel, mvn verify - non-blocking by design)
 #
 # To switch to another registry (ECR / ACR / GCR):
 #   Override the "Login to registry" step in a fork of this workflow.
@@ -40,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    # Principe du moindre privilege — ce job a seulement besoin de lire le repo
+    # Principe du moindre privilege - ce job a seulement besoin de lire le repo
     permissions:
       contents: read
 
@@ -87,10 +96,67 @@ jobs:
           path: target/surefire-reports/
           retention-days: 7
 
-  # ── 2. Docker Build & Push ────────────────────────────────────────────────
+  # ── 2. Trivy filesystem scan ─────────────────────────────────────────────
+  # Scan SCA + secrets sur le code source AVANT de construire l'image Docker.
+  # Complementaire au scan d'image (job "scan") qui, lui, regarde la couche OS.
+  # Vue source : on attrape les CVE dans pom.xml / lockfiles et les secrets
+  # accidentellement commit, avant meme de payer le cout d'un build Docker.
+  trivy-fs:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      security-events: write   # required to upload SARIF (Code Scanning)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Etape 1 - produire un SARIF SANS faire echouer le job.
+      # On exclut target/ et .mvn/ : artefacts de build, non pertinents pour la CVE source.
+      - name: Run Trivy filesystem scan (write SARIF - never fail)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          skip-dirs: 'target,.mvn'
+
+      # Etape 2 - upload SARIF dans l'onglet Security.
+      # continue-on-error : si Code Scanning n'est pas active (repo prive sans GHAS),
+      # on ne casse pas le pipeline - le gate strict en etape 3 prend le relai.
+      - name: Upload Trivy fs SARIF to GitHub Security
+        if: always() && hashFiles('trivy-fs.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+      # Etape 3 - gate STRICT sur CRITICAL uniquement.
+      # On rejoue Trivy avec exit-code:1 et severity:CRITICAL pour bloquer
+      # une PR qui introduit une CVE critique exploitable et corrigeable.
+      - name: Fail build on CRITICAL filesystem CVEs
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          severity: 'CRITICAL'
+          exit-code: '1'
+          ignore-unfixed: true
+          skip-dirs: 'target,.mvn'
+
+  # ── 3. Docker Build & Push ────────────────────────────────────────────────
   docker:
     name: Build & Push Docker Image
-    needs: test
+    # On exige test ET trivy-fs verts avant de payer le cout d'un build/push.
+    needs: [test, trivy-fs]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -98,6 +164,9 @@ jobs:
     outputs:
       image-tag: ${{ steps.meta.outputs.version }}
       image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+      # Digest immuable - sera reutilise par sbom / sign / provenance
+      # pour cibler EXACTEMENT l'image poussee, sans risque de tag reecrase.
+      image-digest: ${{ steps.build.outputs.digest }}
 
     permissions:
       contents: read
@@ -126,6 +195,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # provenance + sbom : Buildx attache des attestations OCI cote registre
+      # en plus des jobs sign/provenance/sbom dedies plus bas (defense en profondeur).
       - name: Build and push
         id: build
         uses: docker/build-push-action@v7.1.0
@@ -136,8 +207,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
 
-  # ── 3. Security Scan ──────────────────────────────────────────────────────
+  # ── 4. Security Scan (image) ─────────────────────────────────────────────
   # NOTE: l'image vient d'etre poussee sur GHCR par le job "docker" en mode prive.
   # Trivy doit s'authentifier a GHCR pour la tirer, sinon il echoue en 12s avec un 401
   # et n'ecrit jamais le SARIF -> l'upload casse derriere avec "Path does not exist".
@@ -163,10 +236,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Etape 1 — produire le SARIF SANS faire echouer le job.
+      # Etape 1 - produire le SARIF SANS faire echouer le job.
       # On retire 'exit-code' pour garantir que le fichier est ecrit
       # meme si des vulnerabilites sont detectees.
-      - name: Run Trivy (write SARIF — never fail)
+      - name: Run Trivy (write SARIF - never fail)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ needs.docker.outputs.image-ref }}
@@ -175,7 +248,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
 
-      # Etape 2 — upload du SARIF dans l'onglet Security.
+      # Etape 2 - upload du SARIF dans l'onglet Security.
       # 'continue-on-error' evite de casser le pipeline si Code Scanning
       # n'est pas active dans les reglages du repo (cas du repo prive sans GHAS).
       - name: Upload Trivy SARIF to GitHub Security
@@ -186,7 +259,7 @@ jobs:
           sarif_file: trivy-results.sarif
           category: trivy
 
-      # Etape 3 — gate qualite : on rejoue Trivy avec exit-code pour bloquer
+      # Etape 3 - gate qualite : on rejoue Trivy avec exit-code pour bloquer
       # le build sur les CVE CRITICAL non corrigeables.
       # Sortie 'table' pour avoir un resume lisible dans les logs.
       - name: Fail build on CRITICAL vulnerabilities
@@ -198,7 +271,121 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
 
-  # ── 4. CodeQL Security Analysis ──────────────────────────────────────────
+  # ── 5. SBOM (Software Bill of Materials) ─────────────────────────────────
+  # Inventaire signe de TOUT ce qui compose l'image : libs Java (pom), libs
+  # systeme (apt/apk), versions, licences. Format CycloneDX (standard ISO).
+  # Indispensable pour repondre en 2s a "ai-je log4shell dans mes images de prod ?".
+  # Exige par US Executive Order 14028 et EU Cyber Resilience Act.
+  sbom:
+    name: Generate SBOM & Attestation
+    needs: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      packages: write       # ecrire l'attestation OCI dans GHCR
+      id-token: write       # OIDC pour signature Sigstore keyless
+      attestations: write   # enregistrer l'attestation cote GitHub
+
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Syft (anchore) scanne l'image produite par le job docker et genere
+      # un SBOM CycloneDX JSON. On cible par digest immuable, pas par tag.
+      - name: Generate SBOM (CycloneDX) via Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.docker.outputs.image-digest }}
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+
+      # Conserve le SBOM comme artifact telechargeable (audit / soutenance).
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+          retention-days: 30
+
+      # Signe le SBOM avec Sigstore (OIDC keyless) et l'attache a l'image
+      # dans GHCR comme "referrer" OCI. Verifiable plus tard avec
+      # `gh attestation verify` ou `cosign verify-attestation`.
+      - name: Attest SBOM to image
+        uses: actions/attest-sbom@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ needs.docker.outputs.image-digest }}
+          sbom-path: sbom.cdx.json
+          push-to-registry: true
+
+  # ── 6. Cosign keyless signing ────────────────────────────────────────────
+  # Signe cryptographiquement l'image avec Sigstore. Mode keyless : pas de
+  # cle privee a gerer - Fulcio emet un certificat ephemere lie a l'identite
+  # OIDC du workflow (repo + commit + workflow path). 10 min de validite,
+  # consigne dans le journal public Rekor.
+  sign:
+    name: Cosign Keyless Signing
+    needs: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      packages: write   # ecrire la signature dans GHCR
+      id-token: write   # OIDC token pour Fulcio (Sigstore CA)
+
+    steps:
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Signe l'image par digest (immuable). COSIGN_EXPERIMENTAL active le
+      # mode keyless dans les versions anciennes ; inoffensif sur v3.x.
+      - name: Sign image with Cosign (keyless)
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.docker.outputs.image-digest }}"
+
+  # ── 7. SLSA Build Provenance ─────────────────────────────────────────────
+  # Atteste, de maniere verifiable, COMMENT l'image a ete construite :
+  # builder (GitHub-hosted runner), source (repo + commit SHA), workflow,
+  # materials. C'est le niveau SLSA L3 (non-falsifiable, automatise).
+  # Permet a un consommateur de prouver que l'image vient bien de notre CI.
+  provenance:
+    name: SLSA Build Provenance
+    needs: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      packages: write       # ecrire l'attestation OCI dans GHCR
+      id-token: write       # OIDC pour Sigstore
+      attestations: write   # enregistrer l'attestation cote GitHub
+
+    steps:
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ needs.docker.outputs.image-digest }}
+          push-to-registry: true
+
+  # ── 8. CodeQL Security Analysis ──────────────────────────────────────────
   codeql:
     name: CodeQL Security Analysis
     runs-on: ubuntu-latest
@@ -240,14 +427,47 @@ jobs:
         with:
           category: "/language:java"
 
-  # ── 5. Promote to test environment ────────────────────────────────────────
+  # ── 9. Quality (Maven verify) ────────────────────────────────────────────
+  # Job qualite non-bloquant : `mvn verify -DskipTests` execute compile +
+  # package + spring-boot:repackage sans relancer la suite de tests (deja
+  # couverte par le job "test"). Sert de garde-fou supplementaire :
+  # detecte une dependance manquante, un plugin casse, un manifest invalide.
+  # Aucun plugin checkstyle/pmd/spotbugs n'est configure dans pom.xml -
+  # on n'en force pas l'ajout pour ne pas generer de bruit artificiel.
+  quality:
+    name: Maven Quality Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Maven verify (skip tests)
+        run: mvn clean verify -B -DskipTests
+
+  # ── 10. Promote to test environment ──────────────────────────────────────
+  # GitOps : on ne deploie vers l'env "test" que si TOUTE la chaine
+  # supply-chain est verte (image scannee, SBOM signe, image signee,
+  # provenance attestee). Cosign + attestations = preuves traçables
+  # en cas d'audit ou d'incident.
   promote-test:
     name: Promote → test
-    needs: [docker, scan]
+    needs: [docker, scan, sbom, sign, provenance]
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    # Principe du moindre privilege — le push vers ppm-gitops utilise GITOPS_TOKEN (PAT)
+    # Principe du moindre privilege - le push vers ppm-gitops utilise GITOPS_TOKEN (PAT)
     # et non GITHUB_TOKEN, donc 'contents: read' suffit pour ce repo-ci.
     permissions:
       contents: read
@@ -275,7 +495,7 @@ jobs:
 
           # Only commit if there is a real change
           if git diff --staged --quiet; then
-            echo "No image tag change detected — skipping commit."
+            echo "No image tag change detected - skipping commit."
           else
             git commit -m "ci(backend): promote ${TAG} to test [skip ci]"
             git push
