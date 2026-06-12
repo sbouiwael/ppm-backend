@@ -81,7 +81,16 @@ public class SecurityConfig {
                 // Actuator health probes pour Kubernetes (liveness + readiness) — sans token
                 .requestMatchers("/actuator/health/**", "/actuator/health").permitAll()
 
-                // Actuator metrics et prometheus — protege en production (ADMIN uniquement)
+                // Endpoint de scraping Prometheus — autorise SANS token.
+                // Justification : Prometheus (Operator) scrape ce endpoint via un ServiceMonitor
+                // sur le Service ClusterIP interne (jamais expose hors du cluster, ni via l'ingress).
+                // On ouvre UNIQUEMENT /actuator/prometheus — le reste d'actuator reste ADMIN.
+                // En production durcie : isoler l'actuator sur un management.server.port dedie
+                // non route par l'ingress, ou ajouter une NetworkPolicy limitant la source au
+                // namespace monitoring.
+                .requestMatchers("/actuator/prometheus").permitAll()
+
+                // Actuator metrics et autres endpoints — proteges (ADMIN uniquement)
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
 
                 // Tous les autres endpoints /api/** necessitent un token JWT valide
