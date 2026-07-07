@@ -45,3 +45,6 @@ projects/
 ### JVM crash dumps ###
 hs_err_pid*.log
 replay_pid*.log
+
+### Build / run artefacts (local) ###
+backend_build.log
